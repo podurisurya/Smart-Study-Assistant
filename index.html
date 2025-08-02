@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Study Assistant</title>
+    <!-- Use Tailwind CSS for modern, responsive styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        /* Custom scrollbar for the textarea */
+        textarea::-webkit-scrollbar {
+            width: 8px;
+        }
+        textarea::-webkit-scrollbar-track {
+            background: #e5e7eb;
+            border-radius: 10px;
+        }
+        textarea::-webkit-scrollbar-thumb {
+            background: #9ca3af;
+            border-radius: 10px;
+        }
+        textarea::-webkit-scrollbar-thumb:hover {
+            background: #6b7280;
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+    <div class="bg-white shadow-xl rounded-2xl p-8 max-w-4xl w-full mx-auto my-8">
+        <!-- Application Title and Description -->
+        <div class="text-center mb-6">
+            <h1 class="text-4xl font-bold text-gray-800">Smart Study Assistant</h1>
+            <p class="mt-2 text-lg text-gray-600">Paste your study material below and let AI generate questions for you!</p>
+        </div>
+
+        <!-- User Input Area -->
+        <div class="mb-6">
+            <label for="studyMaterial" class="block text-sm font-medium text-gray-700 mb-2">
+                Your Study Material
+            </label>
+            <textarea
+                id="studyMaterial"
+                class="w-full p-4 h-48 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 resize-y"
+                placeholder="Paste your text here. The more detailed the content, the better the questions will be. For example: 'Photosynthesis is the process used by plants, algae and certain bacteria to turn light energy into chemical energy.'">
+            </textarea>
+        </div>
+
+        <!-- Action Button and Loading Indicator -->
+        <div class="flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-4 mb-6">
+            <button
+                id="generateBtn"
+                class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-8 rounded-full shadow-lg transition-all duration-300 transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-blue-300"
+            >
+                Generate Questions
+            </button>
+            <div id="loading" class="hidden flex items-center space-x-2 text-gray-500">
+                <svg class="animate-spin h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span class="font-medium">Generating...</span>
+            </div>
+        </div>
+
+        <!-- Output Area for Questions -->
+        <div id="output" class="min-h-[100px] bg-gray-50 p-6 rounded-lg border border-gray-200">
+            <p id="placeholder" class="text-center text-gray-400 font-light italic">
+                Your generated questions will appear here.
+            </p>
+        </div>
+
+        <!-- Error Message Box -->
+        <div id="error-box" class="hidden mt-4 p-4 text-sm text-red-700 bg-red-100 rounded-lg" role="alert">
+            <span class="font-medium">An error occurred:</span>
+            <span id="error-message"></span>
+        </div>
+    </div>
+
+    <!-- JavaScript for core application logic -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const generateBtn = document.getElementById('generateBtn');
+            const studyMaterialInput = document.getElementById('studyMaterial');
+            const outputDiv = document.getElementById('output');
+            const placeholderText = document.getElementById('placeholder');
+            const loadingIndicator = document.getElementById('loading');
+            const errorBox = document.getElementById('error-box');
+            const errorMessageSpan = document.getElementById('error-message');
+
+            // --- Function to display error messages in the UI ---
+            function displayError(message) {
+                errorBox.classList.remove('hidden');
+                errorMessageSpan.textContent = message;
+            }
+
+            // --- Function to clear errors ---
+            function clearError() {
+                errorBox.classList.add('hidden');
+                errorMessageSpan.textContent = '';
+            }
+
+            // --- Function to generate questions from text using the Gemini API ---
+            async function generateQuestions(text) {
+                const prompt = `Based on the following study material, generate 3 multiple-choice questions. Each question must have a 'questionText', an array of 4 'options', and a 'correctAnswerIndex' (0-3). The output must be a single JSON object.
+
+Study Material:
+${text}
+
+Example JSON format:
+{
+    "questions": [
+        {
+            "questionText": "What is the capital of France?",
+            "options": ["Berlin", "Madrid", "Paris", "Rome"],
+            "correctAnswerIndex": 2
+        }
+    ]
+}`;
+                
+                let chatHistory = [];
+                chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+                
+                const payload = {
+                    contents: chatHistory,
+                    generationConfig: {
+                        responseMimeType: "application/json",
+                        responseSchema: {
+                            type: "OBJECT",
+                            properties: {
+                                "questions": {
+                                    "type": "ARRAY",
+                                    "items": {
+                                        "type": "OBJECT",
+                                        "properties": {
+                                            "questionText": { "type": "STRING" },
+                                            "options": {
+                                                "type": "ARRAY",
+                                                "items": { "type": "STRING" }
+                                            },
+                                            "correctAnswerIndex": { "type": "NUMBER" }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                };
+
+                const apiKey = "AIzaSyB1agQ3_hk6aqFlsj6rL_qTOS2VzNtodrE";
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+
+                // --- Exponential backoff retry logic to handle transient errors ---
+                const maxRetries = 5;
+                let retries = 0;
+                let delay = 1000; // 1 second
+
+                while (retries < maxRetries) {
+                    try {
+                        const response = await fetch(apiUrl, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+
+                        if (!response.ok) {
+                            // If the response is not OK, throw an error to trigger the catch block
+                            const errorData = await response.json();
+                            throw new Error(`API Error: ${response.status} - ${JSON.stringify(errorData)}`);
+                        }
+
+                        const result = await response.json();
+                        const jsonString = result?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+                        if (jsonString) {
+                            return JSON.parse(jsonString).questions;
+                        } else {
+                            throw new Error("Failed to parse AI response. The generated content was not in the expected format.");
+                        }
+
+                    } catch (error) {
+                        console.error(`Attempt ${retries + 1} failed:`, error);
+                        if (retries === maxRetries - 1) {
+                            throw error; // Rethrow on last attempt
+                        }
+                        await new Promise(res => setTimeout(res, delay));
+                        delay *= 2; // Double the delay for the next retry
+                        retries++;
+                    }
+                }
+            }
+            
+            // --- Function to render questions in the UI ---
+            function renderQuestions(questions) {
+                if (questions && questions.length > 0) {
+                    outputDiv.innerHTML = questions.map((q, index) => {
+                        const optionsHtml = q.options.map((option, i) => `
+                            <li class="p-3 bg-gray-100 rounded-lg text-gray-700">
+                                <span class="font-semibold">${String.fromCharCode(65 + i)}.</span> ${option}
+                            </li>
+                        `).join('');
+
+                        return `
+                            <div class="question-card p-6 mb-4 border border-gray-300 rounded-lg bg-gray-50 shadow-sm transition-all duration-300">
+                                <h3 class="text-lg font-bold text-gray-800 mb-4">Question ${index + 1}: ${q.questionText}</h3>
+                                <ul class="space-y-3">
+                                    ${optionsHtml}
+                                </ul>
+                                <div class="mt-4 p-3 bg-green-100 text-green-700 border border-green-200 rounded-lg font-medium">
+                                    Correct Answer: <span class="font-bold">${String.fromCharCode(65 + q.correctAnswerIndex)}</span>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                } else {
+                    placeholderText.textContent = "No questions could be generated. Please try again with different or more detailed text.";
+                    outputDiv.innerHTML = `<p class="text-center text-gray-400 font-light italic">${placeholderText.textContent}</p>`;
+                }
+            }
+
+            // --- Event listener for the generate button click ---
+            generateBtn.addEventListener('click', async () => {
+                const text = studyMaterialInput.value.trim();
+                clearError();
+
+                if (text === '') {
+                    displayError('Please paste some text to generate questions from.');
+                    return;
+                }
+
+                // Show loading state
+                generateBtn.disabled = true;
+                generateBtn.textContent = 'Generating...';
+                generateBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+                generateBtn.classList.add('bg-gray-400', 'cursor-not-allowed');
+                loadingIndicator.classList.remove('hidden');
+                outputDiv.innerHTML = `<p class="text-center text-gray-400 font-light italic">Working on it...</p>`;
+
+                try {
+                    const questions = await generateQuestions(text);
+                    renderQuestions(questions);
+                } catch (e) {
+                    console.error('Error generating questions:', e);
+                    displayError('Failed to generate questions. Please check your text or try again later.');
+                    outputDiv.innerHTML = `<p class="text-center text-gray-400 font-light italic">An error occurred.</p>`;
+                } finally {
+                    // Reset button state
+                    generateBtn.disabled = false;
+                    generateBtn.textContent = 'Generate Questions';
+                    generateBtn.classList.remove('bg-gray-400', 'cursor-not-allowed');
+                    generateBtn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+                    loadingIndicator.classList.add('hidden');
+                }
+            });
+        });
+    </script>
+</body>
+</html>
